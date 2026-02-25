@@ -1,14 +1,25 @@
-0:00-0:45 | Intro & Design: "This is my CSU33032 Project 1. I’ve implemented a multi-threaded Web Proxy in Python using raw sockets to avoid high-level library overuse. The proxy listens on Port 4000."
-+1
+0:00 - 0:45 | Introduction
 
-0:45-1:30 | Request Display: "Notice the console logs. As I navigate in Chrome, the proxy displays every HTTP and HTTPS request in real-time on the management console." (Pause to let the logs scroll).
+Visual: Show the core.py code in VS Code.
 
+Audio: "Hi, this is my demonstration of the Web Proxy Server for CSU33032. I developed this using Python’s socket and threading libraries. The proxy is currently listening on Port 4000. My design uses a multi-threaded architecture to ensure that background requests from my Mac don't interfere with the primary browsing session."
 
-1:30-2:15 | Dynamic Blocking: "I will now block 'example.com' via the console. When I try to visit it, the proxy intercepts the request and sends a 403 Forbidden response back to the browser." (Show the blocked page in browser).
+0:45 - 1:45 | Management Console & Blocking
 
+Visual: Show the terminal running. Select "1" to block example.com.
 
-2:15-3:15 | Caching & RTT Proof: "To prove efficiency, look at the timing data. The first visit to an HTTP site takes 180ms. On the second visit, the proxy serves a local cached copy in under 2ms." (Highlight the RTT difference in the terminal).
-+1
+Audio: "Here is the Management Console. I can dynamically block URLs. I’ll add example.com to the list. Now, when I try to visit it in the browser, the proxy intercepts the request, logs it in the console, and returns a 403 Forbidden message."
 
+(Pause for 5 seconds to show the blocked page in the browser)
 
-3:15-4:00 | Multi-threading: "Finally, the proxy uses the threading module to handle these dozens of background requests simultaneously, ensuring no single connection blocks the server."
+1:45 - 3:00 | Caching & Timing Proof
+
+Visual: Visit http://httpforever.com. Show the "Fresh Fetch" log (if you have one) or explain the logic, then refresh to show the 3.86ms Cache Hit.
+
+Audio: "To prove efficiency, I’ve implemented a local cache. On the first visit to this HTTP site, the proxy fetches data from the web. When I refresh, the proxy recognizes the cached hash. You can see the RTT drops from several seconds down to just 3.86 milliseconds. This proves the proxy effectively saves bandwidth."
+
+3:00 - 4:00 | HTTPS Tunneling & Multi-threading
+
+Visual: Open a few tabs or show the terminal flooding with CONNECT requests for Google and Grammarly.
+
+Audio: "Finally, the proxy handles HTTPS using the CONNECT method. You can see dozens of background requests from apps like Grammarly and iCloud appearing in the logs. Because the server is multi-threaded, it handles all these secure tunnels simultaneously without crashing, fulfilling the final project requirement."

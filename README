@@ -15,7 +15,7 @@ Threaded Server: To handle multiple requests simultaneously, each connection is 
 
 Resource Locking: A threading.Lock() is utilized when accessing the blocked_urls set. This ensures that the Admin Console thread and the Request Handler threads do not attempt to modify or read the list at the exact same microsecond, preventing race conditions.
 
-3. macOS Specific Verification
+macOS Specific Verification
 Activity Monitor: You can open "Activity Monitor" on your Mac to see the multiple threads being spawned by your Python process as you load a complex webpage.
 
 Timing Data: In your video demonstration, point out the RTT (Round Trip Time) printed in your console. You will notice that cached requests often show RTTs of 0.5ms to 2.0ms, while fresh fetches will be 50ms to 200ms. This is your proof of efficiency.

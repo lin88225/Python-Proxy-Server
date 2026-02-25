@@ -7,10 +7,10 @@ from datetime import datetime
 
 # Configuration per Specification
 PROXY_HOST = '127.0.0.1'
-PROXY_PORT = 4000  # Listen on Port 4000
+PROXY_PORT = 4000  # Must listen on Port 4000
 BUFFER_SIZE = 8192
 CACHE_DIR = "./proxy_cache"
-blocked_urls = set(["instagram.com"]) # Blocklist
+blocked_urls = set(["instagram.com"]) 
 lock = threading.Lock()
 
 if not os.path.exists(CACHE_DIR):
@@ -21,76 +21,86 @@ def get_cache_filename(url):
     return os.path.join(CACHE_DIR, hashlib.md5(url.encode()).hexdigest())
 
 def handle_client(client_socket, addr):
-    """Threaded handler for simultaneous requests."""
-    start_time = time.time() # 
+    """
+    Threaded handler for simultaneous requests.
+    Uses raw socket.recv to manually capture the byte stream from the client.
+    """
+    start_time = time.time() 
     try:
-        # Receive raw bytes from the client [cite: 8]
+        # We use raw sockets (socket.recv) here to access the low-level byte data.
+        # This avoids high-level libraries that automatically parse HTTP headers.
         request = client_socket.recv(BUFFER_SIZE)
         if not request:
             client_socket.close()
             return
 
-        # Decode the first line once for processing 
+        # Manual parsing of the byte stream to extract the request line
         first_line_raw = request.split(b'\n')[0]
         first_line = first_line_raw.decode('utf-8', 'ignore')
         
-        #  Respond to HTTP & HTTPS requests and display on management console
+        # Display each request on management console
         print(f"\n[MANAGEMENT CONSOLE] {datetime.now().strftime('%H:%M:%S')} | Request: {first_line} from {addr}")
 
-        # Parse Method and URL
+        # Manual string splitting to identify HTTP Method and Target URL
         parts = first_line.split()
         if len(parts) < 2: 
             return
             
-        method = parts[0] # This is now a string
-        url = parts[1]    # This is now a string
+        method = parts[0] 
+        url = parts[1]    
 
-        # [cite: 9] Dynamically block selected URLs via the management console
+        # Dynamic Blocking Logic
         with lock:
             if any(blocked in url for blocked in blocked_urls):
                 print(f"[!] ACCESS DENIED: {url} is currently blocked.")
+                # Construct and send a raw HTTP response manually
                 client_socket.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\nBlocked by Proxy Admin.")
                 client_socket.close()
                 return
 
-        #  Efficiently cache HTTP requests locally
+        # Local Caching Logic
         cache_path = get_cache_filename(url)
         if method == "GET" and os.path.exists(cache_path):
             with open(cache_path, "rb") as f:
                 cached_data = f.read()
+                # Sending raw bytes directly from disk to the socket
                 client_socket.sendall(cached_data)
             
-            #  Gather timing data to prove efficiency
+            # Timing data gathered to show efficiency (RTT)
             rtt = (time.time() - start_time) * 1000
             print(f">>> CACHE HIT | RTT: {rtt:.2f}ms | URL: {url}")
             client_socket.close()
             return
 
-        # Pass the raw request to extraction to avoid double-decoding
+        # Manual extraction of Host/Port from the raw request headers
         host, port = extract_host_port(request, method)
         
-        # Connect to Destination Web Server [cite: 8]
+        # Establishing a manual TCP connection to the destination server
+        # This uses AF_INET (IPv4) and SOCK_STREAM (TCP) sockets.
         remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         remote_socket.connect((host, port))
 
-        if method == "CONNECT":  # HTTPS Tunneling 
+        if method == "CONNECT":  # HTTPS Tunneling (TCP Relay)
+            # Send a manual 200 OK to the client to begin the tunnel
             client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             tunnel(client_socket, remote_socket)
-        else:  # Standard HTTP [cite: 8]
+        else:  # Standard HTTP Proxying
+            # Manually relaying the client's request bytes to the remote server
             remote_socket.sendall(request)
             response_full = b""
             while True:
+                # Manually receiving response chunks from the web server
                 data = remote_socket.recv(BUFFER_SIZE)
                 if not data: break
+                # Relaying chunks directly back to the client socket
                 client_socket.sendall(data)
                 response_full += data
             
-            #  Save to Cache for bandwidth efficiency
+            # Save the raw response bytes to cache for future bandwidth efficiency
             if response_full:
                 with open(cache_path, "wb") as f:
                     f.write(response_full)
             
-            #  Final RTT for fresh fetch
             rtt = (time.time() - start_time) * 1000
             print(f">>> FRESH FETCH | RTT: {rtt:.2f}ms | Host: {host}")
 
@@ -100,7 +110,10 @@ def handle_client(client_socket, addr):
         client_socket.close()
 
 def tunnel(client, remote):
-    """Relays HTTPS response to browser."""
+    """
+    Relays HTTPS traffic. We use a low-level bi-directional byte relay
+    to handle the CONNECT method without decrypting the TLS payload.
+    """
     def forward(src, dst):
         try:
             while True:
@@ -109,11 +122,15 @@ def tunnel(client, remote):
                 dst.sendall(data)
         except: pass
     
-    # Bi-directional relaying
+    # Spawning threads for manual bi-directional data transfer
     threading.Thread(target=forward, args=(client, remote), daemon=True).start()
     forward(remote, client)
 
 def extract_host_port(request, method):
+    """
+    Manual header parsing: We iterate through the raw request lines
+    to find the 'Host' header and port information.
+    """
     try:
         lines = request.split(b'\n')
         host = ""
@@ -129,7 +146,7 @@ def extract_host_port(request, method):
         return "127.0.0.1", 80
 
 def management_console():
-    """Allows dynamic blocking via management console."""
+    """Provides a CLI interface to manage proxy settings dynamically."""
     global blocked_urls
     while True:
         print("\n--- PROXY COMMANDS ---")
@@ -147,18 +164,22 @@ def management_console():
             print(f"Current Blocklist: {list(blocked_urls)}")
 
 def start():
-    """Main threaded server."""
+    """
+    Initializes the master server socket. 
+    By using 'SO_REUSEADDR', we ensure the port can be reclaimed immediately.
+    """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((PROXY_HOST, PROXY_PORT))
-    server.listen(100) 
+    server.listen(100) # Support a queue of up to 100 concurrent requests
     
-    # Management Console Thread
+    # Threading used to keep the console alive while the server runs
     threading.Thread(target=management_console, daemon=True).start()
     
     print(f"[*] Multi-threaded Proxy running on Port {PROXY_PORT}...")
     while True:
         conn, addr = server.accept()
+        # Threading per connection allows for simultaneous client handling
         threading.Thread(target=handle_client, args=(conn, addr)).start()
 
 if __name__ == "__main__":
