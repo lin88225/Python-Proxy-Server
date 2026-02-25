@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
+Date: Wed, 25 Feb 2026 16:39:06 GMT
+Content-Type: text/css
+Content-Length: 99
+Last-Modified: Wed, 16 Nov 2022 20:59:48 GMT
+Connection: keep-alive
+ETag: "63754f44-63"
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+Feature-Policy: accelerometer 'none'; camera 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; payment 'none'; usb 'none'
+Content-Security-Policy: default-src 'self'; script-src cdnjs.cloudflare.com 'self' 'report-sha256'; style-src cdnjs.cloudflare.com 'self' fonts.googleapis.com 'unsafe-inline'; font-src fonts.googleapis.com fonts.gstatic.com cdnjs.cloudflare.com; frame-ancestors 'none'; report-uri https://scotthelme.report-uri.com/r/d/csp/enforce
+Accept-Ranges: bytes
+
+body,input,select,textarea{font-size:11pt}#banner{background-size:1125px 225px;padding:12em 0 10em}

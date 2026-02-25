@@ -22,24 +22,30 @@ def get_cache_filename(url):
 
 def handle_client(client_socket, addr):
     """Threaded handler for simultaneous requests."""
-    start_time = time.time() # Start timing for RTT data
+    start_time = time.time() # 
     try:
+        # Receive raw bytes from the client [cite: 8]
         request = client_socket.recv(BUFFER_SIZE)
         if not request:
             client_socket.close()
             return
 
-        # Display each request on management console
-        first_line = request.split(b'\n')[0].decode('utf-8', 'ignore')
+        # Decode the first line once for processing 
+        first_line_raw = request.split(b'\n')[0]
+        first_line = first_line_raw.decode('utf-8', 'ignore')
+        
+        #  Respond to HTTP & HTTPS requests and display on management console
         print(f"\n[MANAGEMENT CONSOLE] {datetime.now().strftime('%H:%M:%S')} | Request: {first_line} from {addr}")
 
         # Parse Method and URL
         parts = first_line.split()
-        if len(parts) < 2: return
-        method = parts[0].decode('utf-8')
-        url = parts[1].decode('utf-8')
+        if len(parts) < 2: 
+            return
+            
+        method = parts[0] # This is now a string
+        url = parts[1]    # This is now a string
 
-        # Dynamically block selected URLs
+        # [cite: 9] Dynamically block selected URLs via the management console
         with lock:
             if any(blocked in url for blocked in blocked_urls):
                 print(f"[!] ACCESS DENIED: {url} is currently blocked.")
@@ -47,30 +53,30 @@ def handle_client(client_socket, addr):
                 client_socket.close()
                 return
 
-        # Efficiently cache HTTP GET requests locally
+        #  Efficiently cache HTTP requests locally
         cache_path = get_cache_filename(url)
         if method == "GET" and os.path.exists(cache_path):
             with open(cache_path, "rb") as f:
                 cached_data = f.read()
                 client_socket.sendall(cached_data)
             
-            # Gather timing data to prove efficiency
+            #  Gather timing data to prove efficiency
             rtt = (time.time() - start_time) * 1000
             print(f">>> CACHE HIT | RTT: {rtt:.2f}ms | URL: {url}")
             client_socket.close()
             return
 
-        # Extract Host and Port for relaying to the Web Server
+        # Pass the raw request to extraction to avoid double-decoding
         host, port = extract_host_port(request, method)
         
-        # Connect to Destination Web Server (Relaying to 'CS Internet')
+        # Connect to Destination Web Server [cite: 8]
         remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         remote_socket.connect((host, port))
 
-        if method == "CONNECT":  # HTTPS Tunneling
+        if method == "CONNECT":  # HTTPS Tunneling 
             client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             tunnel(client_socket, remote_socket)
-        else:  # Standard HTTP
+        else:  # Standard HTTP [cite: 8]
             remote_socket.sendall(request)
             response_full = b""
             while True:
@@ -79,12 +85,12 @@ def handle_client(client_socket, addr):
                 client_socket.sendall(data)
                 response_full += data
             
-            # Save to Cache for bandwidth efficiency
+            #  Save to Cache for bandwidth efficiency
             if response_full:
                 with open(cache_path, "wb") as f:
                     f.write(response_full)
             
-            # Final RTT for fresh fetch
+            #  Final RTT for fresh fetch
             rtt = (time.time() - start_time) * 1000
             print(f">>> FRESH FETCH | RTT: {rtt:.2f}ms | Host: {host}")
 

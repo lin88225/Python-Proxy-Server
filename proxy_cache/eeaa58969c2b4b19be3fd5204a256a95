@@ -1,0 +1,30 @@
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
+Date: Wed, 25 Feb 2026 16:42:30 GMT
+Content-Type: image/svg+xml
+Content-Length: 501
+Last-Modified: Wed, 16 Nov 2022 20:59:46 GMT
+Connection: keep-alive
+ETag: "63754f42-1f5"
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+Feature-Policy: accelerometer 'none'; camera 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; payment 'none'; usb 'none'
+Content-Security-Policy: default-src 'self'; script-src cdnjs.cloudflare.com 'self' 'report-sha256'; style-src cdnjs.cloudflare.com 'self' fonts.googleapis.com 'unsafe-inline'; font-src fonts.googleapis.com fonts.gstatic.com cdnjs.cloudflare.com; frame-ancestors 'none'; report-uri https://scotthelme.report-uri.com/r/d/csp/enforce
+Accept-Ranges: bytes
+
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1500" height="300" viewBox="0 0 1500 300" zoomAndPan="disable">
+
+    <style type="text/css"><![CDATA[
+		polygon {
+			fill: rgba(255,255,255,0.035);
+		}
+    ]]></style>
+    
+	<!-- Main -->
+		<polygon points="0,0 275,200 400,100 525,200 750,50 1100,250 1500,0 1500,300 0,300" />
+
+	<!-- Highlights -->
+		<polygon points="0,0 175,300 410,300" />
+		<polygon points="750,50 1100,250 900,365" />
+
+</svg>
