@@ -1,128 +1,159 @@
 import socket
-import _thread
+import threading
 import time
 import hashlib
 import os
+from datetime import datetime
 
-# Configuration
-PROXY_PORT = 4000
+# Configuration per Specification
+PROXY_HOST = '127.0.0.1'
+PROXY_PORT = 4000  # Listen on Port 4000
 BUFFER_SIZE = 8192
 CACHE_DIR = "./proxy_cache"
-BLOCKED_URLS = set(["example.com", "socialmedia.com"]) # Management Console Mock
+blocked_urls = set(["instagram.com"]) # Blocklist
+lock = threading.Lock()
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
-def get_cache_path(url):
-    """Generates a unique filename for a URL using MD5 hashing."""
+def get_cache_filename(url):
+    """Creates a unique hash for the URL to store locally."""
     return os.path.join(CACHE_DIR, hashlib.md5(url.encode()).hexdigest())
 
-def proxy_thread(conn, addr):
-    """Handles individual client requests."""
+def handle_client(client_socket, addr):
+    """Threaded handler for simultaneous requests."""
+    start_time = time.time() # Start timing for RTT data
     try:
-        start_time = time.time()
-        request = conn.recv(BUFFER_SIZE).decode('utf-8', 'ignore')
-        
+        request = client_socket.recv(BUFFER_SIZE)
         if not request:
-            conn.close()
+            client_socket.close()
             return
 
-        # Parse the first line (e.g., GET http://www.google.com/ HTTP/1.1)
-        first_line = request.split('\n')[0]
-        url = first_line.split(' ')[1]
+        # Display each request on management console
+        first_line = request.split(b'\n')[0].decode('utf-8', 'ignore')
+        print(f"\n[MANAGEMENT CONSOLE] {datetime.now().strftime('%H:%M:%S')} | Request: {first_line} from {addr}")
 
-        # 2. Blocking Logic
-        for blocked in BLOCKED_URLS:
-            if blocked in url:
-                print(f"[!] Blocked access to: {url}")
-                conn.send(b"HTTP/1.1 403 Forbidden\r\n\r\nBlocked by Proxy Admin.")
-                conn.close()
+        # Parse Method and URL
+        parts = first_line.split()
+        if len(parts) < 2: return
+        method = parts[0].decode('utf-8')
+        url = parts[1].decode('utf-8')
+
+        # Dynamically block selected URLs
+        with lock:
+            if any(blocked in url for blocked in blocked_urls):
+                print(f"[!] ACCESS DENIED: {url} is currently blocked.")
+                client_socket.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\nBlocked by Proxy Admin.")
+                client_socket.close()
                 return
 
-        # 3. Caching Logic (HTTP GET only)
-        cache_file = get_cache_path(url)
-        if os.path.exists(cache_file) and "GET" in first_line:
-            with open(cache_file, "rb") as f:
-                conn.send(f.read())
+        # Efficiently cache HTTP GET requests locally
+        cache_path = get_cache_filename(url)
+        if method == "GET" and os.path.exists(cache_path):
+            with open(cache_path, "rb") as f:
+                cached_data = f.read()
+                client_socket.sendall(cached_data)
+            
+            # Gather timing data to prove efficiency
             rtt = (time.time() - start_time) * 1000
-            print(f"[*] Cache Hit: {url} | RTT: {rtt:.2f}ms")
-            conn.close()
+            print(f">>> CACHE HIT | RTT: {rtt:.2f}ms | URL: {url}")
+            client_socket.close()
             return
 
-        # Parse host and port
-        http_pos = url.find("://")
-        temp = url if http_pos == -1 else url[(http_pos+3):]
+        # Extract Host and Port for relaying to the Web Server
+        host, port = extract_host_port(request, method)
         
-        port_pos = temp.find(":")
-        webserver_pos = temp.find("/")
-        if webserver_pos == -1: webserver_pos = len(temp)
+        # Connect to Destination Web Server (Relaying to 'CS Internet')
+        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        remote_socket.connect((host, port))
 
-        webserver = ""
-        port = 80
-        if port_pos == -1 or webserver_pos < port_pos:
-            webserver = temp[:webserver_pos]
-        else:
-            port = int((temp[(port_pos+1):])[:webserver_pos-port_pos-1])
-            webserver = temp[:port_pos]
-
-        # Connect to destination Web Server
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((webserver, port))
-        
-        # HTTPS Tunneling (CONNECT)
-        if "CONNECT" in first_line:
-            conn.send(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-            conn.setblocking(0)
-            s.setblocking(0)
+        if method == "CONNECT":  # HTTPS Tunneling
+            client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            tunnel(client_socket, remote_socket)
+        else:  # Standard HTTP
+            remote_socket.sendall(request)
+            response_full = b""
             while True:
-                try:
-                    data = conn.recv(BUFFER_SIZE)
-                    if not data: break
-                    s.send(data)
-                except: pass
-                try:
-                    reply = s.recv(BUFFER_SIZE)
-                    if not reply: break
-                    conn.send(reply)
-                except: pass
-        # Standard HTTP
-        else:
-            s.send(request.encode())
-            full_response = b""
-            while True:
-                reply = s.recv(BUFFER_SIZE)
-                if len(reply) > 0:
-                    conn.send(reply)
-                    full_response += reply
-                else:
-                    break
+                data = remote_socket.recv(BUFFER_SIZE)
+                if not data: break
+                client_socket.sendall(data)
+                response_full += data
             
-            # Save to Cache
-            if len(full_response) > 0:
-                with open(cache_file, "wb") as f:
-                    f.write(full_response)
-
-        rtt = (time.time() - start_time) * 1000
-        print(f"[*] Fetched: {webserver} | RTT: {rtt:.2f}ms")
-        s.close()
-        conn.close()
+            # Save to Cache for bandwidth efficiency
+            if response_full:
+                with open(cache_path, "wb") as f:
+                    f.write(response_full)
+            
+            # Final RTT for fresh fetch
+            rtt = (time.time() - start_time) * 1000
+            print(f">>> FRESH FETCH | RTT: {rtt:.2f}ms | Host: {host}")
 
     except Exception as e:
-        print(f"[!] Error: {e}")
-        conn.close()
+        print(f"[!] Error handling request: {e}")
+    finally:
+        client_socket.close()
 
-def start_server():
-    """Initializes the listening socket on Port 4000."""
+def tunnel(client, remote):
+    """Relays HTTPS response to browser."""
+    def forward(src, dst):
+        try:
+            while True:
+                data = src.recv(BUFFER_SIZE)
+                if not data: break
+                dst.sendall(data)
+        except: pass
+    
+    # Bi-directional relaying
+    threading.Thread(target=forward, args=(client, remote), daemon=True).start()
+    forward(remote, client)
+
+def extract_host_port(request, method):
+    try:
+        lines = request.split(b'\n')
+        host = ""
+        for line in lines:
+            if b'Host:' in line:
+                host = line.split(b' ')[1].decode().strip()
+                break
+        if ":" in host:
+            h, p = host.split(":")
+            return h, int(p)
+        return host, (443 if method == "CONNECT" else 80)
+    except:
+        return "127.0.0.1", 80
+
+def management_console():
+    """Allows dynamic blocking via management console."""
+    global blocked_urls
+    while True:
+        print("\n--- PROXY COMMANDS ---")
+        print("1: Block URL | 2: Unblock URL | 3: List Blocked")
+        cmd = input("Select: ")
+        if cmd == '1':
+            url = input("Enter domain to block: ")
+            with lock: blocked_urls.add(url)
+            print(f"[*] {url} blocked.")
+        elif cmd == '2':
+            url = input("Enter domain to unblock: ")
+            with lock: blocked_urls.discard(url)
+            print(f"[*] {url} unblocked.")
+        elif cmd == '3':
+            print(f"Current Blocklist: {list(blocked_urls)}")
+
+def start():
+    """Main threaded server."""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(('', PROXY_PORT))
-    server.listen(50)
-    print(f"[*] Proxy Server running on port {PROXY_PORT}...")
-
+    server.bind((PROXY_HOST, PROXY_PORT))
+    server.listen(100) 
+    
+    # Management Console Thread
+    threading.Thread(target=management_console, daemon=True).start()
+    
+    print(f"[*] Multi-threaded Proxy running on Port {PROXY_PORT}...")
     while True:
         conn, addr = server.accept()
-        # 1. Multi-threading Concurrency
-        _thread.start_new_thread(proxy_thread, (conn, addr))
+        threading.Thread(target=handle_client, args=(conn, addr)).start()
 
 if __name__ == "__main__":
-    start_server()
+    start()

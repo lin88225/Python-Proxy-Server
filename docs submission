@@ -1,0 +1,20 @@
+High-Level Protocol Design
+The Web Proxy Server acts as an intermediary between a Web Client and a Web Server. The design is based on the following protocol cycle:
+
+
+Socket Initialization: The proxy initializes a TCP server socket on Port 4000.
+
+
+Multi-threaded Connection: Upon accepting a connection, the server spawns a new thread to ensure it can handle multiple requests simultaneously.
+
+
+Request Parsing: The proxy reads the raw bytes from the client and parses the HTTP method and destination URL.
+
+
+Access Control: Before relaying, the proxy checks the host against a dynamic blocklist managed via a console sub-interface.
+
+
+Caching Logic: For HTTP GET requests, the proxy checks a local directory for a hashed version of the URL to serve the data locally, saving bandwidth.
+
+
+HTTPS Tunneling: If the method is CONNECT, the proxy establishes a bi-directional TCP tunnel to Port 443 of the destination, relaying encrypted traffic without modification
